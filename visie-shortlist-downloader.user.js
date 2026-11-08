@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Visie 收藏原图批量下载
 // @namespace    local.visie.shortlist-downloader
-// @version      1.1.0
-// @description  在已登录的 Chrome 中选择 Visie 收藏原图，自动分包保存 ZIP；支持预览选图、设置记忆、停止及失败重试。
+// @version      1.2.0
+// @description  在已登录的 Chrome 中按项目选择 Visie 收藏原图，自定义文件夹/文件命名，自动分包保存 ZIP；记住已下载项目，支持停止与失败重试。
 // @match        https://visie.io/*
 // @match        https://www.visie.io/*
 // @run-at       document-idle
@@ -20,7 +20,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const ALLOWED_HOSTS = new Set(['cdn.visie.io', 'visie.io', 'www.visie.io']);
   const MAX_IMAGE_BYTES = 64 * 1024 * 1024;
   const PART_BYTES = 64 * 1024 * 1024;
@@ -344,131 +344,303 @@
   const shadow = host.attachShadow({ mode: 'open' });
   shadow.innerHTML = `
     <style>
-      :host{font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18181b;color-scheme:light}
+      :host{font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;color:#18181b;color-scheme:light}
       :host([hidden]),[hidden]{display:none!important}*{box-sizing:border-box}
-      button,select,input{font:inherit}button{cursor:pointer;border:1px solid #d4d4d8;border-radius:8px;background:#fff;padding:7px 11px;color:#18181b}
+      button,select,input{font:inherit;color:#18181b}
+      button{cursor:pointer;border:1px solid #d4d4d8;border-radius:8px;background:#fff;padding:6px 11px}
       button:hover:not(:disabled){background:#f4f4f5}button:disabled{opacity:.45;cursor:not-allowed}
-      button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+      :is(button,select,input):focus-visible{outline:2px solid #2563eb;outline-offset:2px}
       .primary{background:#18181b;color:#fff;border-color:#18181b}.primary:hover:not(:disabled){background:#3f3f46}
-      #toggle{float:right;box-shadow:0 4px 20px #0002}#panel{clear:both;width:min(380px,calc(100vw - 40px));max-height:80vh;overflow:auto;background:white;border:1px solid #ddd;border-radius:12px;padding:16px;box-shadow:0 8px 35px #0003;margin-bottom:10px}
-      h3{font-size:16px;margin:0}p{margin:8px 0}.muted{font-size:12px;color:#666}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
-      #status{white-space:pre-wrap;overflow-wrap:anywhere;max-height:160px;overflow:auto}progress{width:100%;accent-color:#18181b;margin-top:12px}
-      #save{width:100%;background:#166534;color:white;margin-top:10px}select{border:1px solid #ddd;border-radius:6px;padding:5px;max-width:100%;background:white;color:#18181b}
-      details{margin-top:10px}summary{cursor:pointer}input[type=checkbox]{accent-color:#18181b}label{cursor:pointer}
-      #picker{border:1px solid #ddd;border-radius:16px;padding:0;background:white;color:#18181b;width:min(1000px,94vw);max-height:90vh;box-shadow:0 20px 80px #0004;font:inherit}
-      #picker::backdrop{background:#0007;backdrop-filter:blur(3px)}.picker-head,.picker-foot{padding:16px 20px}.picker-head{border-bottom:1px solid #eee}.picker-title-row{display:flex;justify-content:space-between;gap:12px;align-items:center}
-      #picker-title{font-size:19px;margin:0}.picker-foot{border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-      #gallery{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;padding:18px 20px;max-height:52vh;overflow:auto;min-height:180px}
-      .preview-card{position:relative;border:2px solid #e4e4e7;border-radius:9px;overflow:hidden;padding:7px;background:#fff;font-size:12px;min-width:0}
-      .preview-card:has(input:checked){border-color:#2563eb;background:#eff6ff}.preview-card input{position:absolute;top:9px;left:9px;width:18px;height:18px;z-index:1}
-      .preview-card img{display:block;width:100%;height:135px;object-fit:contain;background:#f4f4f5;border-radius:5px}.preview-card strong,.preview-card small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-card strong{margin-top:6px}.preview-card small{color:#666}
-      .preview-error{height:135px;display:flex;align-items:center;text-align:center;color:#777}.pager{justify-content:center;margin:0;padding:8px}
-      @media(max-width:700px){#gallery{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:12px}.preview-card img,.preview-error{height:105px}.picker-head,.picker-foot{padding:12px}}
+      input[type=search],input[type=text],select{border:1px solid #d4d4d8;border-radius:8px;padding:6px 9px;background:#fff}
+      input[type=checkbox]{accent-color:#2563eb;width:16px;height:16px;margin:0}
+      label{cursor:pointer}.muted{font-size:12px;color:#71717a}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+      #toggle{float:right;box-shadow:0 4px 20px #0002}
+      #panel{clear:both;width:min(360px,calc(100vw - 40px));max-height:70vh;overflow:auto;background:#fff;border:1px solid #e4e4e7;border-radius:12px;padding:14px;box-shadow:0 8px 35px #0003;margin-bottom:10px;display:grid;gap:10px}
+      #panel h3{font-size:15px;margin:0}#status{white-space:pre-wrap;overflow-wrap:anywhere;max-height:140px;overflow:auto;margin:0}#summary{margin:0}
+      progress{width:100%;accent-color:#2563eb}#save{width:100%;background:#166534;color:#fff;border-color:#166534}
+      #picker{border:0;border-radius:14px;padding:0;width:min(1180px,96vw);height:min(860px,92vh);box-shadow:0 20px 80px #0005;color:#18181b;background:#fff}
+      #picker[open]{display:flex;flex-direction:column}#picker::backdrop{background:#0008;backdrop-filter:blur(3px)}
+      .ph{padding:14px 18px;border-bottom:1px solid #eee;display:grid;gap:10px}.ph h2{font-size:18px;margin:0}
+      .title-row{display:flex;justify-content:space-between;align-items:center;gap:12px}#search{flex:1;min-width:180px}
+      .body{flex:1;display:grid;grid-template-columns:1fr 300px;min-height:0}
+      #projects{overflow:auto;padding:12px 18px;display:grid;gap:8px;align-content:start}
+      .proj{border:1px solid #e4e4e7;border-radius:10px;background:#fff}.proj.on{border-color:#2563eb;background:#f5f8ff}
+      .proj-main{display:grid;grid-template-columns:auto 64px 1fr auto;gap:12px;align-items:center;padding:8px 10px}
+      .proj-main img,.tile img{background:#f4f4f5;object-fit:cover;border-radius:6px;display:block}.proj-main img{width:64px;height:80px}
+      .meta{min-width:0}.meta strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.meta small{display:block}
+      .badge{display:inline-block;font-size:11px;padding:0 7px;border-radius:99px;background:#dcfce7;color:#166534;margin-left:6px}
+      .imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;padding:0 10px 10px}
+      .tile{position:relative;border:2px solid transparent;border-radius:8px;overflow:hidden}.tile.on{border-color:#2563eb}
+      .tile img{width:100%;aspect-ratio:3/4}.tile input{position:absolute;top:6px;left:6px}
+      .tile .done{position:absolute;right:4px;bottom:4px;font-size:10px;background:#166534;color:#fff;border-radius:4px;padding:0 4px}
+      .naming{border-left:1px solid #eee;padding:14px 16px;overflow:auto;display:grid;gap:10px;align-content:start;background:#fafafa}
+      .naming h4{margin:4px 0 0;font-size:13px}.naming label{display:grid;gap:4px;font-size:12px;color:#52525b}
+      .naming label.inline{display:flex;align-items:center;gap:6px;color:#18181b;font-size:13px}
+      .chips{display:flex;flex-wrap:wrap;gap:5px}.chips button{padding:2px 8px;font-size:12px;border-radius:99px}
+      #name-preview{display:block;font:12px/1.6 ui-monospace,Menlo,monospace;background:#fff;border:1px solid #e4e4e7;border-radius:8px;padding:8px;white-space:pre-wrap;word-break:break-all}
+      .warn{color:#b45309;font-size:12px;margin:0}.empty{padding:40px;text-align:center;color:#71717a}
+      .pf{padding:12px 18px;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+      @media(max-width:800px){.body{grid-template-columns:1fr;grid-template-rows:1fr auto}.naming{border-left:0;border-top:1px solid #eee;max-height:40vh}}
     </style>
-    <section id="panel" hidden aria-label="Visie 图片下载面板">
-      <h3>Visie 收藏原图下载 <small class="muted">v1.1</small></h3>
-      <div class="row"><button id="start" class="primary" disabled>选择图片并下载</button><button id="scan">重新读取</button><button id="choose" disabled>重新选图</button></div>
-      <div class="row"><button id="retry" disabled>重试失败</button><button id="links" disabled>导出所选链接</button><button id="stop" disabled>停止</button></div>
-      <details><summary>下载设置（自动记住）</summary>
-        <div class="row"><label><input id="auto" type="checkbox" checked> 自动保存 ZIP，不逐包确认</label></div>
-        <div class="row"><label>每包最多 <select id="size"><option>25</option><option selected>50</option><option>100</option></select> 张</label><span class="muted">约 64 MiB 提前分包</span></div>
-      </details>
+    <section id="panel" hidden aria-label="Visie 下载面板">
+      <h3>Visie 收藏原图下载</h3>
+      <p id="summary" class="muted"></p>
       <progress id="progress" value="0" max="1"></progress>
-      <p id="summary" class="muted"></p><p id="status" role="status" aria-live="polite">点击入口即可读取收藏并选图。</p>
-      <button id="save" hidden>保存 ZIP 并继续</button>
-      <div class="row"><button id="resave" hidden>重新保存最近一包</button></div>
-      <p class="muted">自动保存请允许 Chrome 的多文件下载，并核对下载列表；受拦截可改用手动模式。仅保留最近一包供补存。关闭或刷新页面会丢失未保存进度。</p>
+      <p id="status" role="status" aria-live="polite">点击「选择图片」读取当前收藏。</p>
+      <button id="save" hidden>保存 ZIP</button>
+      <div class="row">
+        <button id="choose" class="primary">选择图片</button>
+        <button id="stop" disabled>停止</button>
+        <button id="start" disabled>继续剩余</button>
+        <button id="retry" disabled>重试失败</button>
+      </div>
+      <div class="row">
+        <button id="resave" disabled title="重新保存最近一包，不重新下载">重存最近一包</button>
+        <button id="links" disabled title="导出当前所选图片的原图链接">导出链接</button>
+      </div>
     </section>
-    <button id="toggle" aria-expanded="false">↓ Visie 下载</button>
+    <button id="toggle" aria-expanded="false">Visie 下载</button>
     <dialog id="picker" aria-labelledby="picker-title">
-      <header class="picker-head">
-        <div class="picker-title-row"><h2 id="picker-title">选择要下载的图片</h2><button id="close-picker" aria-label="关闭选图窗口">✕</button></div>
-        <p id="picker-note" class="muted"></p>
-        <div class="row"><select id="group" aria-label="筛选项目"><option value="">全部项目</option></select><button id="all">全选当前范围</button><button id="none">清空当前范围</button><button id="invert">反选当前范围</button></div>
-      </header>
-      <div id="gallery" aria-label="图片选择列表"></div>
-      <div class="row pager"><button id="previous">上一页</button><span id="page-label" class="muted"></span><button id="next">下一页</button></div>
-      <footer class="picker-foot"><span id="selection-count"></span><div class="row"><button id="cancel-picker">稍后下载</button><button id="confirm" class="primary">开始下载</button></div></footer>
+      <div class="ph">
+        <div class="title-row">
+          <h2 id="picker-title">选择要下载的项目</h2>
+          <span id="selection-count" class="muted"></span>
+        </div>
+        <div class="row">
+          <input id="search" type="search" placeholder="搜索项目名、品牌、日期…" aria-label="搜索项目">
+          <button id="all" title="选中当前列表中可见的全部项目">全选可见</button>
+          <button id="only-new" title="选中可见项目中尚未下载过的图片">选未下载</button>
+          <button id="none">清空</button>
+          <label class="inline"><input id="hide-done" type="checkbox"> 隐藏已下载项目</label>
+        </div>
+      </div>
+      <div class="body">
+        <div id="projects" role="list"></div>
+        <aside class="naming" aria-label="命名与下载设置">
+          <h4>命名方式</h4>
+          <label>预设<select id="preset"></select></label>
+          <label>文件夹名（留空则不分文件夹）<input id="folder-tpl" type="text" spellcheck="false"></label>
+          <label>文件名<input id="file-tpl" type="text" spellcheck="false"></label>
+          <div>
+            <p class="muted" style="margin:0 0 4px">点字段插入到光标处：</p>
+            <div id="chips" class="chips"></div>
+          </div>
+          <p id="name-warn" class="warn" hidden></p>
+          <div><p class="muted" style="margin:0 0 4px">预览（按当前选择）：</p><code id="name-preview"></code></div>
+          <h4>下载设置</h4>
+          <label class="inline"><input id="auto" type="checkbox"> 自动保存 ZIP（不必每包确认）</label>
+          <label>每包最多<select id="size"><option value="25">25 张</option><option value="50">50 张</option><option value="100">100 张</option></select></label>
+          <p class="muted" style="margin:0">单包约超过 64 MiB 会提前分包。设置会自动记住。</p>
+          <button id="clear-history" title="清除本收藏的“已下载”标记">清除本收藏的下载记录</button>
+        </aside>
+      </div>
+      <div class="pf">
+        <span id="pick-hint" class="muted">点项目卡片选中整个项目；点「选单张」可只挑其中几张。</span>
+        <div class="row"><button id="cancel-picker">取消</button><button id="confirm" class="primary" disabled>开始下载</button></div>
+      </div>
     </dialog>`;
   document.documentElement.appendChild(host);
   const $ = id => shadow.getElementById(id);
-  const state = { collection: null, source: '', items: [], selected: new Set(), taskItems: [], remaining: [], failed: new Map(), done: new Set(), busy: false, controller: null, ready: null, lastSaved: null, part: 0, saves: 0, started: false, galleryPage: 0 };
+  const state = { collection: null, source: '', items: [], projects: [], selected: new Set(), expanded: new Set(), taskItems: [], remaining: [], failed: new Map(), done: new Set(), busy: false, controller: null, ready: null, lastSaved: null, part: 0, saves: 0, started: false, namer: null, lastInput: null };
   const routeId = () => /^\/shortlists\/(\d+)\/?$/.exec(location.pathname)?.[1];
   const routeKey = () => location.origin + location.pathname + location.search;
   const status = text => { $('status').textContent = text; };
   const openPanel = () => { $('panel').hidden = false; $('toggle').setAttribute('aria-expanded', 'true'); };
   const selectedItems = () => state.items.filter(item => state.selected.has(item.url));
-  const filteredItems = () => state.items.filter(item => !$('group').value || item.group === $('group').value);
+  const itemsOf = project => state.items.filter(item => item.group === project.key);
+  const doneMap = () => (state.collection && history[state.collection.id]) || {};
+  const isDone = item => !!doneMap()[itemKey(item)];
+
   $('auto').checked = preferences.autoSave;
   $('size').value = String(preferences.size);
+  $('folder-tpl').value = preferences.folderTemplate;
+  $('file-tpl').value = preferences.fileTemplate;
+  $('hide-done').checked = preferences.hideDone;
+  for (const [i, p] of PRESETS.entries()) $('preset').add(new Option(p.label, String(i)));
+  $('preset').add(new Option('自定义', 'custom'));
+  for (const key of Object.keys(NAME_FIELDS)) {
+    const chip = document.createElement('button'); chip.type = 'button'; chip.textContent = key;
+    chip.onclick = () => insertField(`{${key}}`); $('chips').appendChild(chip);
+  }
 
-  function rememberSettings() {
-    preferences = { autoSave: $('auto').checked, size: Number($('size').value) };
+  function persist(key, value) {
     try {
-      if (typeof GM_setValue === 'function') {
-        Promise.resolve(GM_setValue(SETTINGS_KEY, preferences)).catch(() => status('设置未能持久保存；本次仍有效。'));
-      }
+      if (typeof GM_setValue === 'function') Promise.resolve(GM_setValue(key, value)).catch(() => status('设置未能持久保存；本次仍有效。'));
     } catch { status('设置未能持久保存；本次仍有效。'); }
   }
-  $('auto').onchange = rememberSettings;
-  $('size').onchange = rememberSettings;
+  function rememberSettings() {
+    preferences = { autoSave: $('auto').checked, size: Number($('size').value), folderTemplate: $('folder-tpl').value.slice(0, 200),
+      fileTemplate: $('file-tpl').value.slice(0, 200), hideDone: $('hide-done').checked };
+    persist(SETTINGS_KEY, preferences);
+  }
+  function markSaved(records) {
+    if (!state.collection || !records?.length) return;
+    const id = state.collection.id, map = { ...(history[id] || {}) }, now = Date.now();
+    for (const record of records) map[itemKey(record)] = now;
+    history = { ...history, [id]: map };
+    persist(HISTORY_KEY, history);
+  }
 
   function render() {
     const locked = state.busy || !!state.ready;
-    $('scan').disabled = locked || !routeId();
     $('size').disabled = locked; $('auto').disabled = locked;
-    $('choose').disabled = locked || !state.items.length;
-    $('start').disabled = locked || (state.started ? !state.remaining.length : !state.items.length);
-    $('start').textContent = state.started ? '继续剩余图片' : '选择图片并下载';
+    $('choose').disabled = locked || !routeId();
+    $('start').disabled = locked || !state.started || !state.remaining.length;
     $('retry').disabled = locked || !state.failed.size;
     $('links').disabled = !state.selected.size || state.busy;
     $('stop').disabled = !state.busy;
     $('save').hidden = !state.ready;
-    $('resave').hidden = !state.lastSaved || !!state.ready;
-    if (state.lastSaved) $('resave').title = state.lastSaved.filename;
-    $('progress').max = Math.max(1, state.started ? state.taskItems.length : state.selected.size);
-    $('progress').value = state.done.size;
-    $('summary').textContent = state.collection
-      ? `${state.collection.title}：共 ${state.items.length} 张，已选 ${state.selected.size} 张${state.started ? `；已获取 ${state.done.size}/${state.taskItems.length}；失败 ${state.failed.size}；待处理 ${state.remaining.length}；已发起 ${state.saves} 包保存` : ''}` : '';
+    $('resave').disabled = !state.lastSaved || !!state.ready;
+    if (state.lastSaved) $('resave').title = '重新保存：' + state.lastSaved.filename;
+    $('progress').max = Math.max(1, state.started ? state.taskItems.length : 1);
+    $('progress').value = state.started ? state.done.size : 0;
+    $('summary').textContent = !state.collection ? '' : state.started
+      ? `${state.collection.title}：本次 ${state.taskItems.length} 张；已获取 ${state.done.size}；失败 ${state.failed.size}；待处理 ${state.remaining.length}；已发起 ${state.saves} 包保存`
+      : `${state.collection.title}：${state.projects.length} 个项目，${state.items.length} 张`;
   }
 
+  // ---- 命名设置 ----
+  function syncPreset() {
+    const i = PRESETS.findIndex(p => p.folder === $('folder-tpl').value && p.file === $('file-tpl').value);
+    $('preset').value = i >= 0 ? String(i) : 'custom';
+  }
+  function insertField(token) {
+    const input = state.lastInput || $('file-tpl');
+    const start = input.selectionStart ?? input.value.length, end = input.selectionEnd ?? start;
+    const before = input.value.slice(0, start), after = input.value.slice(end);
+    const sep = before && !/[_\-\s/]$/.test(before) ? '_' : '';
+    input.value = before + sep + token + after;
+    const pos = (before + sep + token).length;
+    input.focus(); input.setSelectionRange(pos, pos);
+    onNamingChange();
+  }
+  function currentNamer() {
+    return makeNamer($('folder-tpl').value, $('file-tpl').value || DEFAULT_FILE_TEMPLATE, { collection: state.collection?.title || '' });
+  }
+  function renderNamePreview() {
+    const sample = (selectedItems().length ? selectedItems() : state.items).slice(0, 3);
+    const namer = currentNamer();
+    $('name-preview').textContent = sample.length ? sample.map(item => namer(item, 'jpg')).join('\n') : '（读取收藏后显示）';
+    const file = $('file-tpl').value;
+    const unique = /\{(图片序号|总序号|原文件名|图片ID)\}/.test(file);
+    const unknown = [...($('folder-tpl').value + file).matchAll(/\{([^{}]+)\}/g)].map(m => m[1].trim()).filter(k => !NAME_FIELDS[k]);
+    const warns = [];
+    if (!file.trim()) warns.push('文件名为空，将使用默认格式。');
+    else if (!unique) warns.push('文件名没有序号或 ID，同名文件会自动加 _2、_3。');
+    if (unknown.length) warns.push(`不认识的字段会被忽略：${[...new Set(unknown)].join('、')}`);
+    $('name-warn').textContent = warns.join(' ');
+    $('name-warn').hidden = !warns.length;
+  }
+  function onNamingChange() { syncPreset(); rememberSettings(); renderNamePreview(); }
+  $('folder-tpl').onfocus = $('file-tpl').onfocus = event => { state.lastInput = event.target; };
+  $('folder-tpl').oninput = $('file-tpl').oninput = onNamingChange;
+  $('preset').onchange = () => {
+    const p = PRESETS[Number($('preset').value)];
+    if (p) { $('folder-tpl').value = p.folder; $('file-tpl').value = p.file; }
+    rememberSettings(); renderNamePreview();
+  };
+  syncPreset();
+
+  // ---- 按项目选图 ----
+  function visibleProjects() {
+    const q = $('search').value.trim().toLowerCase();
+    return state.projects.filter(p => {
+      if ($('hide-done').checked && itemsOf(p).every(isDone)) return false;
+      return !q || [p.name, p.fullName, p.brand, p.date].join(' ').toLowerCase().includes(q);
+    });
+  }
   function updateSelectionCount() {
-    $('selection-count').textContent = `已选 ${state.selected.size} / ${state.items.length} 张`;
-    $('confirm').textContent = `开始下载（${state.selected.size} 张）`;
-    $('confirm').disabled = !state.selected.size;
-    render();
+    const n = state.selected.size;
+    const projects = state.projects.filter(p => itemsOf(p).some(i => state.selected.has(i.url))).length;
+    $('selection-count').textContent = `已选 ${projects} 个项目 · ${n} / ${state.items.length} 张`;
+    $('confirm').textContent = n ? `开始下载（${n} 张）` : '开始下载';
+    $('confirm').disabled = !n;
+    renderNamePreview(); render();
   }
+  function setItems(items, on) { for (const i of items) on ? state.selected.add(i.url) : state.selected.delete(i.url); }
 
-  function renderGallery() {
-    const items = filteredItems(), pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-    state.galleryPage = Math.min(state.galleryPage, pages - 1);
-    $('gallery').replaceChildren();
-    for (const item of items.slice(state.galleryPage * PAGE_SIZE, (state.galleryPage + 1) * PAGE_SIZE)) {
-      const card = document.createElement('label'); card.className = 'preview-card';
-      const box = document.createElement('input'); box.type = 'checkbox'; box.checked = state.selected.has(item.url);
-      box.dataset.url = item.url; box.setAttribute('aria-label', `${item.sequence}. ${item.project} ${item.name}`);
-      box.onchange = () => { box.checked ? state.selected.add(item.url) : state.selected.delete(item.url); updateSelectionCount(); };
-      const img = document.createElement('img'); img.alt = item.name; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
-      img.onerror = () => { const error = document.createElement('span'); error.className = 'preview-error'; error.textContent = '预览不可用，仍可选择原图'; img.replaceWith(error); };
-      img.src = item.previewUrl || item.url;
-      const title = document.createElement('strong'); title.textContent = `${item.sequence}. ${item.project || item.name}`; title.title = item.name;
-      const size = document.createElement('small'); size.textContent = item.width && item.height ? `${item.width} × ${item.height}` : '尺寸未知';
-      card.append(box, img, title, size); $('gallery').appendChild(card);
+  function projectCard(project) {
+    const items = itemsOf(project), chosen = items.filter(i => state.selected.has(i.url)).length, done = items.filter(isDone).length;
+    const card = document.createElement('div'); card.className = 'proj' + (chosen ? ' on' : ''); card.setAttribute('role', 'listitem');
+    card.dataset.key = project.key;
+    const main = document.createElement('div'); main.className = 'proj-main';
+    const box = document.createElement('input'); box.type = 'checkbox';
+    box.checked = chosen === items.length; box.indeterminate = chosen > 0 && chosen < items.length;
+    box.setAttribute('aria-label', `选择项目 ${project.name}`);
+    box.onclick = event => event.stopPropagation();
+    box.onchange = () => { setItems(items, box.checked); refreshCard(project); };
+    const img = document.createElement('img'); img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
+    img.onerror = () => { img.onerror = null; img.src = project.cover; };
+    img.src = previewUrl(project.cover) || project.cover;
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const title = document.createElement('strong'); title.textContent = project.name; title.title = project.fullName || project.name;
+    if (done) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = done === items.length ? '已下载' : `已下载 ${done}/${items.length}`; title.appendChild(b); }
+    const sub = document.createElement('small'); sub.className = 'muted';
+    sub.textContent = [project.brand, project.date, `${items.length} 张`, chosen && chosen < items.length ? `已选 ${chosen} 张` : ''].filter(Boolean).join(' · ');
+    meta.append(title, sub);
+    const actions = document.createElement('div'); actions.className = 'row';
+    const expand = document.createElement('button'); expand.type = 'button';
+    const open = state.expanded.has(project.key);
+    expand.textContent = open ? '收起' : '选单张'; expand.setAttribute('aria-expanded', String(open));
+    expand.onclick = event => { event.stopPropagation(); open ? state.expanded.delete(project.key) : state.expanded.add(project.key); refreshCard(project); };
+    actions.appendChild(expand);
+    if (project.url) {
+      const link = document.createElement('a'); link.href = project.url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = '打开';
+      link.className = 'muted'; link.onclick = event => event.stopPropagation(); actions.appendChild(link);
     }
-    $('page-label').textContent = `第 ${state.galleryPage + 1} / ${pages} 页 · 当前范围 ${items.length} 张`;
-    $('previous').disabled = state.galleryPage === 0; $('next').disabled = state.galleryPage + 1 === pages;
-    $('gallery').scrollTop = 0;
+    main.append(box, img, meta, actions);
+    main.style.cursor = 'pointer';
+    main.onclick = () => { setItems(items, chosen !== items.length); refreshCard(project); };
+    card.appendChild(main);
+    if (open) {
+      const grid = document.createElement('div'); grid.className = 'imgs';
+      for (const item of items) {
+        const tile = document.createElement('label'); tile.className = 'tile' + (state.selected.has(item.url) ? ' on' : '');
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = state.selected.has(item.url); cb.dataset.url = item.url;
+        cb.setAttribute('aria-label', `${project.name} 第 ${item.indexInProject} 张`);
+        cb.onchange = () => { setItems([item], cb.checked); refreshCard(project); };
+        const pic = document.createElement('img'); pic.alt = ''; pic.loading = 'lazy'; pic.decoding = 'async'; pic.referrerPolicy = 'no-referrer';
+        pic.onerror = () => { pic.onerror = null; pic.src = item.url; };
+        pic.src = previewUrl(item.url) || item.url; pic.title = item.width ? `${item.width} × ${item.height}` : item.name;
+        tile.append(cb, pic);
+        if (isDone(item)) { const d = document.createElement('span'); d.className = 'done'; d.textContent = '已下载'; tile.appendChild(d); }
+        grid.appendChild(tile);
+      }
+      card.appendChild(grid);
+    }
+    return card;
+  }
+  function refreshCard(project) {
+    const old = $('projects').querySelector(`[data-key="${CSS.escape(project.key)}"]`);
+    if (old) old.replaceWith(projectCard(project));
     updateSelectionCount();
   }
+  function renderProjects() {
+    const list = visibleProjects();
+    $('projects').replaceChildren(...list.map(projectCard));
+    if (!list.length) {
+      const empty = document.createElement('p'); empty.className = 'empty';
+      empty.textContent = state.projects.length ? '没有符合条件的项目。' : '收藏里没有可下载的图片。';
+      $('projects').appendChild(empty);
+    }
+    updateSelectionCount();
+  }
+  $('search').oninput = renderProjects;
+  $('hide-done').onchange = () => { rememberSettings(); renderProjects(); };
+  $('all').onclick = () => { for (const p of visibleProjects()) setItems(itemsOf(p), true); renderProjects(); };
+  $('only-new').onclick = () => { for (const p of visibleProjects()) for (const i of itemsOf(p)) setItems([i], !isDone(i)); renderProjects(); };
+  $('none').onclick = () => { state.selected.clear(); renderProjects(); };
+  $('clear-history').onclick = () => {
+    if (!state.collection || !confirm('清除本收藏的“已下载”标记？不会删除已保存的文件。')) return;
+    const next = { ...history }; delete next[state.collection.id]; history = next; persist(HISTORY_KEY, history); renderProjects();
+  };
 
   function openPicker() {
     if (state.busy || state.ready) return;
     if (!state.collection || routeKey() !== state.source) { scan(); return; }
-    $('picker-note').textContent = state.started
-      ? '重新开始会重置当前任务进度；可能重新下载之前的图片。只想继续，请关闭窗口并点「继续剩余图片」。'
-      : '默认全部选中，也可逐张或按项目选择。筛选项目不会自动取消其他项目；只下某项目请先清空全部，再筛选并全选。';
-    renderGallery();
+    renderProjects();
     if (!$('picker').open) $('picker').showModal();
+    $('search').focus();
   }
 
   function saveBlob(blob, filename) {
@@ -485,9 +657,9 @@
     $('picker').close();
     state.busy = true; state.controller = new AbortController();
     const signal = state.controller.signal, source = routeKey(), id = routeId();
-    state.collection = null; state.source = ''; state.items = []; state.remaining = []; state.taskItems = [];
-    state.selected.clear(); state.failed.clear(); state.done.clear(); state.part = 0; state.saves = 0; state.started = false;
-    render(); status('正在读取收藏，稍后自动打开选图窗口…');
+    state.collection = null; state.source = ''; state.items = []; state.projects = []; state.remaining = []; state.taskItems = [];
+    state.selected.clear(); state.expanded.clear(); state.failed.clear(); state.done.clear(); state.part = 0; state.saves = 0; state.started = false;
+    render(); status('正在读取收藏，稍后自动打开选择窗口…');
     let success = false;
     const timer = setTimeout(() => state.controller?.abort(new DOMException('读取超时，请检查网络后重试。', 'AbortError')), 45000);
     try {
@@ -496,22 +668,11 @@
       if (new URL(response.url).pathname !== new URL(source).pathname) throw new Error('网站跳转到了其他页面，请先在此 Chrome 登录并打开收藏。');
       const text = await response.text(); aborted(signal);
       if (routeKey() !== source) throw new Error('收藏页面已切换，请重新读取。');
-      const doc = new DOMParser().parseFromString(text, 'text/html');
-      const collection = collectImages(readPageData(doc), id);
-      // 只使用页面实际声明的预览地址；原图下载仍使用 media.url。
-      const previews = new Map();
-      for (const img of [...doc.querySelectorAll('img[id]'), ...document.querySelectorAll('img[id]')]) {
-        const url = allowedImageUrl(img.currentSrc || img.getAttribute('src'));
-        if (url) previews.set(img.id, url);
-      }
-      for (const item of collection.images) item.previewUrl = previews.get(String(item.id)) || item.url;
-      state.collection = collection; state.source = source; state.items = collection.images;
-      state.selected = new Set(state.items.map(item => item.url)); state.galleryPage = 0;
-      $('group').replaceChildren(new Option('全部项目', ''));
-      for (const [group, title] of new Map(state.items.map(item => [item.group, item.project || item.group]))) $('group').add(new Option(title, group));
+      const collection = collectImages(readPageData(new DOMParser().parseFromString(text, 'text/html')), id);
+      state.collection = collection; state.source = source; state.items = collection.images; state.projects = collection.projects;
       const s = collection.stats;
       const warnings = [s.videos && `跳过 ${s.videos} 个视频`, s.duplicates && `去重 ${s.duplicates} 张`, s.unavailable && `${s.unavailable} 个条目已不可用`, s.unsupported && `${s.unsupported} 个未知类型未读取`, s.rejected && `${s.rejected} 个图片地址不受支持`].filter(Boolean);
-      status(`${state.items.length ? '清单已就绪，无需滚动页面。选好图片即可开始下载。' : '未找到可下载的图片。'}${warnings.length ? '\n' + warnings.join('；') + '。' : ''}`);
+      status(`${state.items.length ? '清单已就绪。勾选要下载的项目即可。' : '未找到可下载的图片。'}${warnings.length ? '\n' + warnings.join('；') + '。' : ''}`);
       success = !!state.items.length;
     } catch (error) { status(error.message); }
     finally { clearTimeout(timer); state.busy = false; state.controller = null; render(); }
@@ -521,19 +682,25 @@
   function report(failures) {
     return JSON.stringify({ version: VERSION, collection: state.collection?.title,
       source: state.source.split('?')[0], createdAt: new Date().toISOString(), selectedCount: state.taskItems.length,
+      naming: { folder: preferences.folderTemplate, file: preferences.fileTemplate },
       scope: '仅所选收藏图片；使用 media.url，不推测地址、不降级缩略图。保存次数只代表已发起下载，需核对浏览器下载列表。',
       skipped: state.collection?.stats, failed: failures }, null, 2);
+  }
+
+  function zipName(records, part) {
+    const groups = [...new Set(records.map(r => r.group))];
+    const base = groups.length === 1 && records[0] ? `${state.collection.title}_${records[0].project}` : state.collection.title;
+    return `${safeName(base, 80)}_part-${String(part).padStart(3, '0')}.zip`;
   }
 
   function stagePart(files, records, failures, signal) {
     const part = ++state.part;
     const blob = makeZip([...files, { name: '图片清单.json', data: JSON.stringify(records, null, 2) }, { name: '下载报告.json', data: report(failures) }]);
-    const filename = `${safeName(state.collection.title, 70)}_${state.collection.id}_part-${String(part).padStart(3, '0')}.zip`;
-    const packet = { blob, filename };
+    const packet = { blob, filename: zipName(records, part), records };
     let autoError = '';
     if (preferences.autoSave && signal && !signal.aborted) {
       try {
-        saveBlob(blob, filename); state.lastSaved = packet; state.saves++;
+        saveBlob(blob, packet.filename); state.lastSaved = packet; state.saves++; markSaved(records);
         status(`已发起第 ${part} 包保存，继续下载。请允许浏览器多文件下载并核对下载列表。`);
         render(); return Promise.resolve();
       } catch (error) {
@@ -556,7 +723,7 @@
 
   async function start(retry = false) {
     if (state.busy || state.ready) return;
-    if (routeKey() !== state.source) { status('当前页面与已读取的收藏不一致，请先重新读取。'); return; }
+    if (routeKey() !== state.source) { status('当前页面与已读取的收藏不一致，请重新选择图片。'); return; }
     if (typeof GM_xmlhttpRequest !== 'function') { status('缺少脚本猫下载 API。请作为用户脚本安装，不要粘贴到网页控制台。'); return; }
     if (retry) state.remaining = [...new Map([...state.failed.values()].map(f => [f.item.url, f.item]).concat(state.remaining.map(i => [i.url, i]))).values()];
     if (!state.remaining.length) return;
@@ -572,8 +739,8 @@
     try {
       while (state.remaining.length) {
         aborted(signal);
-        if (routeKey() !== state.source) throw new DOMException('页面已切换，任务已停止。请重新读取新收藏。', 'AbortError');
-        const item = state.remaining[0]; status(`正在下载：${item.project}\n${item.name}`);
+        if (routeKey() !== state.source) throw new DOMException('页面已切换，任务已停止。请重新选择图片。', 'AbortError');
+        const item = state.remaining[0]; status(`正在下载：${item.project}（第 ${item.indexInProject}/${item.projectTotal} 张）`);
         let result;
         try { result = await downloadImage(item.url, signal, GM_xmlhttpRequest, sleep, status); }
         catch (error) {
@@ -583,7 +750,7 @@
         }
         if (files.length && bytes + result.data.length > PART_BYTES) await flush();
         aborted(signal);
-        const path = imagePath(item, result.extension);
+        const path = imagePath(item, result.extension, state.namer);
         files.push({ name: path, data: result.data }); records.push({ ...item, file: path }); bytes += result.data.length;
         state.done.add(item.url); state.failed.delete(item.url); state.remaining.shift(); render();
         if (files.length >= maxCount || bytes >= PART_BYTES) await flush();
@@ -599,15 +766,17 @@
 
   function launch() {
     openPanel();
-    if (!state.busy && !state.ready && (!state.collection || routeKey() !== state.source)) scan();
-    else if (!state.started && !state.busy && !state.ready) openPicker();
+    if (!state.busy && !state.ready && !state.started) openPicker();
   }
   $('toggle').onclick = () => {
     if ($('panel').hidden) launch();
     else { $('panel').hidden = true; $('toggle').setAttribute('aria-expanded', 'false'); }
   };
-  $('scan').onclick = scan; $('choose').onclick = openPicker;
-  $('start').onclick = () => state.started ? start() : openPicker();
+  $('choose').onclick = () => {
+    if (state.started && state.remaining.length && !confirm('当前任务还有未下载的图片。重新选择会放弃剩余进度，继续吗？')) return;
+    if (!state.collection || routeKey() !== state.source) scan(); else openPicker();
+  };
+  $('start').onclick = () => start();
   $('retry').onclick = () => start(true);
   $('stop').onclick = () => state.controller?.abort(new DOMException('你已停止任务。', 'AbortError'));
   $('links').onclick = () => saveBlob(new Blob([selectedItems().map(i => i.url).join('\n') + '\n'], { type: 'text/plain;charset=utf-8' }), `${safeName(state.collection.title)}-所选原图链接.txt`);
@@ -615,7 +784,8 @@
     const ready = state.ready; if (!ready) return;
     try { saveBlob(ready.blob, ready.filename); }
     catch (error) { status(`无法发起保存：${error.message}。ZIP 仍保留，可重试。`); return; }
-    state.lastSaved = { blob: ready.blob, filename: ready.filename }; state.saves++; state.ready = null;
+    state.lastSaved = { blob: ready.blob, filename: ready.filename, records: ready.records }; state.saves++; state.ready = null;
+    markSaved(ready.records);
     ready.resume?.();
     if (!state.busy) status('已发起 ZIP 保存，请检查下载列表。可继续剩余图片或重试失败项。');
     render();
@@ -625,22 +795,15 @@
     try { saveBlob(state.lastSaved.blob, state.lastSaved.filename); status(`已再次发起保存：${state.lastSaved.filename}。请核对下载列表。`); }
     catch (error) { status(`补存失败：${error.message}`); }
   };
-  $('group').onchange = () => { state.galleryPage = 0; renderGallery(); };
-  for (const mode of ['all', 'none', 'invert']) $(mode).onclick = () => {
-    for (const item of filteredItems()) {
-      const selected = mode === 'all' || (mode === 'invert' && !state.selected.has(item.url));
-      selected ? state.selected.add(item.url) : state.selected.delete(item.url);
-    }
-    renderGallery();
-  };
-  $('previous').onclick = () => { state.galleryPage--; renderGallery(); };
-  $('next').onclick = () => { state.galleryPage++; renderGallery(); };
-  $('close-picker').onclick = $('cancel-picker').onclick = () => $('picker').close();
+  $('auto').onchange = $('size').onchange = rememberSettings;
+  $('cancel-picker').onclick = () => $('picker').close();
   $('confirm').onclick = () => {
     if (state.busy || state.ready || !state.selected.size) return;
-    if (routeKey() !== state.source) { $('picker').close(); status('页面已切换，请重新读取收藏。'); return; }
+    if (routeKey() !== state.source) { $('picker').close(); status('页面已切换，请重新选择图片。'); return; }
+    rememberSettings();
+    state.namer = currentNamer();
     state.taskItems = selectedItems(); state.remaining = [...state.taskItems];
-    state.done.clear(); state.failed.clear(); state.saves = 0; state.started = true;
+    state.done.clear(); state.failed.clear(); state.saves = 0; state.part = 0; state.started = true;
     $('picker').close(); render(); start();
   };
   if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('打开 Visie 下载面板', () => {
@@ -652,7 +815,7 @@
     const current = routeKey();
     if (current !== lastRoute) {
       lastRoute = current; $('picker').close();
-      state.controller?.abort(new DOMException('页面已切换，任务已停止。请重新读取收藏。', 'AbortError'));
+      state.controller?.abort(new DOMException('页面已切换，任务已停止。请重新选择图片。', 'AbortError'));
     }
     host.hidden = !routeId() && !state.busy && !state.ready;
     render();
