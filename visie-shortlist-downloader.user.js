@@ -7,6 +7,8 @@
 // @match        https://www.visie.io/*
 // @run-at       document-idle
 // @noframes
+// @updateURL    https://raw.githubusercontent.com/bRkka71/visie-shortlist-downloader/main/visie-shortlist-downloader.user.js
+// @downloadURL  https://raw.githubusercontent.com/bRkka71/visie-shortlist-downloader/main/visie-shortlist-downloader.user.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
 // @grant        GM_getValue
