@@ -165,3 +165,9 @@ node --test tests/core.test.cjs
 ```
 
 交互流程参考了 [XHS-Downloader](https://github.com/JoeanAmier/XHS-Downloader) 的「预览选图 → 自动保存」设计，代码为独立实现。
+
+---
+
+## 其他脚本
+
+- [Pinterest 画板原图批量下载](https://github.com/bRkka71/pinterest-board-downloader) — 同样是脚本猫用户脚本，一键下载 Pinterest 画板原图和视频，按分区选择，自定义命名，附 CSV 出处清单。
